@@ -1,4 +1,4 @@
-import { z } from "zod";
+const { z } = require("zod");
 
 const numberLike = z.union([z.number(), z.string()]).transform((val) => {
   const num = Number(val);
@@ -48,7 +48,7 @@ const plotSchema = z
 
 const resourceCollectionSchema = z.record(plotSchema);
 
-export const farmSchema = z
+const farmSchema = z
   .object({
     farm: z
       .object({
@@ -63,4 +63,6 @@ export const farmSchema = z
   })
   .passthrough();
 
-export type FarmData = z.infer<typeof farmSchema>;
+module.exports = {
+  farmSchema,
+};
