@@ -1,0 +1,24 @@
+{
+  "name": "sunflower-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.5.0",
+    "node-fetch": "^2.7.0",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/node-fetch": "^2.6.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
