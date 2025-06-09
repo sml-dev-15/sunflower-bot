@@ -2,17 +2,19 @@
   "name": "sunflower-bot",
   "version": "1.0.0",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "postinstall": "npm run build",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "NODE_ENV=development ts-node src/index.ts",
+    "format": "prettier --write ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Discord.js bot with TypeScript",
   "dependencies": {
     "discord.js": "^14.19.3",
     "dotenv": "^16.5.0",
@@ -21,6 +23,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "prettier": "^3.3.2",
+    "@typescript-eslint/eslint-plugin": "^7.8.0",
+    "@typescript-eslint/parser": "^7.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
