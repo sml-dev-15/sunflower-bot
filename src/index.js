@@ -151,6 +151,9 @@ function getStoneTimers(farm) {
   );
 }
 
+const cooldowns = new Map();
+const COOLDOWN_SECONDS = 30;
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -166,12 +169,25 @@ client.once("ready", () => {
 client.on("messageCreate", async (message) => {
   if (!message.content.startsWith("!farm")) return;
 
+  const userId = message.author.id;
+  const now = Date.now();
+
+  if (cooldowns.has(userId)) {
+    const expiration = cooldowns.get(userId);
+    if (now < expiration) {
+      const timeLeft = Math.ceil((expiration - now) / 1000);
+      return message.reply(
+        `⏳ Please wait ${timeLeft} more second(s) before using this command again.`
+      );
+    }
+  }
+
+  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
+
   const [, id] = message.content.split(" ");
   if (!id) return message.reply("❌ Please provide a farm ID.");
 
   try {
-    // fetch is already imported above
-
     const res = await fetch(
       `https://api.sunflower-land.com/community/farms/${id}`
     );
