@@ -1,7 +1,7 @@
-import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
-import { farmSchema } from "./schema";
-import fetch from "node-fetch";
-import dotenv from "dotenv";
+const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+const { farmSchema } = require("./schema");
+const fetch = require("node-fetch");
+const dotenv = require("dotenv");
 
 dotenv.config();
 
@@ -35,24 +35,21 @@ const CROPS_TIMES = {
   Kale: { harvestSeconds: 36 * 60 * 60 },
   Artichoke: { harvestSeconds: 36 * 60 * 60 },
   Barley: { harvestSeconds: 48 * 60 * 60 },
-} as const;
+};
 
 const RESOURCE_RECOVERY_TIMES = {
   Stone: 4 * 60 * 60,
   Iron: 8 * 60 * 60,
   Gold: 24 * 60 * 60,
-} as const;
+};
 
 const RESOURCE_KEY_MAP = {
   stones: "Stone",
   iron: "Iron",
   gold: "Gold",
-} as const;
+};
 
-type ResourceType = keyof typeof RESOURCE_KEY_MAP;
-type RecoveryKey = (typeof RESOURCE_KEY_MAP)[ResourceType];
-
-function formatDuration(seconds: number) {
+function formatDuration(seconds) {
   if (seconds <= 0) return "✅ Ready!";
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -60,13 +57,8 @@ function formatDuration(seconds: number) {
   return `${h ? `${h}h ` : ""}${m ? `${m}m ` : ""}${s}s`;
 }
 
-function groupByTime<T>(
-  items: T[],
-  getSeconds: (item: T) => number,
-  getName: (item: T) => string,
-  emoji: (item: T) => string
-): string[] {
-  const groups: Record<string, { time: number; count: number }[]> = {};
+function groupByTime(items, getSeconds, getName, emoji) {
+  const groups = {};
 
   for (const item of items) {
     const name = getName(item);
@@ -85,11 +77,11 @@ function groupByTime<T>(
     }
   }
 
-  const result: string[] = [];
+  const result = [];
 
   for (const [name, group] of Object.entries(groups)) {
     for (const g of group) {
-      const emojiIcon = emoji({ name } as any);
+      const emojiIcon = emoji({ name });
       const timeStr = formatDuration(g.time);
       result.push(
         `${emojiIcon} ${name} — ${timeStr}${g.count > 1 ? ` (${g.count})` : ""}`
@@ -100,15 +92,14 @@ function groupByTime<T>(
   return result;
 }
 
-function getCropTimers(farm: any): string[] {
+function getCropTimers(farm) {
   const now = Date.now();
   const cropPlots = Object.values(farm.crops)
-    .map((plot: any) => {
+    .map((plot) => {
       const crop = plot.crop;
       if (!crop) return null;
       const plantedAt = Number(crop.plantedAt);
-      const growTime =
-        CROPS_TIMES[crop.name as keyof typeof CROPS_TIMES]?.harvestSeconds ?? 0;
+      const growTime = CROPS_TIMES[crop.name]?.harvestSeconds ?? 0;
       const readyAt = plantedAt + growTime * 1000;
       const secondsLeft = Math.floor((readyAt - now) / 1000);
       return {
@@ -116,36 +107,34 @@ function getCropTimers(farm: any): string[] {
         secondsLeft,
       };
     })
-    .filter(Boolean) as { name: string; secondsLeft: number }[];
+    .filter(Boolean);
 
   return groupByTime(
     cropPlots,
     (c) => c.secondsLeft,
     (c) => c.name,
-    (c) => "🌱"
+    () => "🌱"
   );
 }
 
-function getStoneTimers(farm: any): string[] {
+function getStoneTimers(farm) {
   const now = Date.now();
-  const plots: { name: string; secondsLeft: number }[] = [];
+  const plots = [];
 
-  for (const type of ["stones", "iron", "gold"] as ResourceType[]) {
+  ["stones", "iron", "gold"].forEach((type) => {
     const entries = farm[type];
-    if (!entries) continue;
+    if (!entries) return;
 
     const recoveryKey = RESOURCE_KEY_MAP[type];
     const recoveryTime = RESOURCE_RECOVERY_TIMES[recoveryKey];
 
-    for (const plot of Object.values(entries) as Array<{
-      stone?: { minedAt: number };
-    }>) {
+    for (const plot of Object.values(entries)) {
       const minedAt = Number(plot.stone?.minedAt ?? 0);
       const readyAt = minedAt + recoveryTime * 1000;
       const secondsLeft = Math.floor((readyAt - now) / 1000);
       plots.push({ name: recoveryKey, secondsLeft });
     }
-  }
+  });
 
   return groupByTime(
     plots,
@@ -181,7 +170,7 @@ client.on("messageCreate", async (message) => {
   if (!id) return message.reply("❌ Please provide a farm ID.");
 
   try {
-    const fetch = (await import("node-fetch")).default;
+    // fetch is already imported above
 
     const res = await fetch(
       `https://api.sunflower-land.com/community/farms/${id}`
