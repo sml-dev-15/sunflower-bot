@@ -1,12 +1,4 @@
-const {
-  Client,
-  GatewayIntentBits,
-  EmbedBuilder,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  Events,
-} = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const { farmSchema } = require("./schema");
 const fetch = require("node-fetch");
 const dotenv = require("dotenv");
@@ -171,58 +163,35 @@ client.once("ready", () => {
   console.log(`🤖 Logged in as ${client.user?.tag}`);
 });
 
-// Register the slash command
-const commands = [
-  new SlashCommandBuilder()
-    .setName("farm")
-    .setDescription("Check farm status by ID")
-    .addStringOption((option) =>
-      option.setName("id").setDescription("Your farm ID").setRequired(true)
-    ),
-].map((command) => command.toJSON());
+client.on("messageCreate", async (message) => {
+  if (!message.content.startsWith("!farm")) return;
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-(async () => {
-  try {
-    console.log("🔄 Registering slash command...");
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-      body: commands,
-    });
-    console.log("✅ Slash command registered.");
-  } catch (err) {
-    console.error("❌ Error registering command:", err);
-  }
-})();
-
-// Handle slash command interaction
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "farm") return;
-
-  const id = interaction.options.getString("id");
-
-  await interaction.deferReply();
+  const [, id] = message.content.split(" ");
+  if (!id) return message.reply("❌ Please provide a farm ID.");
 
   try {
+    // fetch is already imported above
+
     const res = await fetch(
       `https://api.sunflower-land.com/community/farms/${id}`
     );
+
     if (!res.ok) {
-      return interaction.editReply(
+      return message.reply(
         `❌ Failed to fetch farm data (status: ${res.status})`
       );
     }
 
     const json = await res.json();
+    console.log("API response:", json);
 
     let parsed;
     try {
       parsed = farmSchema.parse(json);
     } catch (parseErr) {
       console.error("Schema parse error:", parseErr);
-      return interaction.editReply(
-        "⚠️ Failed to parse farm data (schema mismatch)."
+      return message.reply(
+        "⚠️ Failed to parse farm data (schema mismatch). Please check the farm ID."
       );
     }
 
@@ -237,10 +206,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       )
       .setColor(0x00cc66);
 
-    interaction.editReply({ embeds: [embed] });
+    message.reply({ embeds: [embed] });
   } catch (err) {
     console.error("Unexpected error:", err);
-    interaction.editReply("⚠️ Failed to fetch or parse data.");
+    message.reply("⚠️ Failed to fetch or parse data.");
   }
 });
 
