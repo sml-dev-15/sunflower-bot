@@ -16,5 +16,6 @@
     "ts-node": "^10.9.2",
     "@types/node": "^22.15.30",
     "@types/node-fetch": "^2.6.12"
-  }
+  },
+  "devDependencies": {}
 }
