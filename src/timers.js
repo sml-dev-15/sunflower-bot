@@ -93,9 +93,9 @@ function getStoneTimers(farm) {
       p.name === "Stone"
         ? "🪨"
         : p.name === "Iron"
-        ? "🟫"
+        ? "🛠️"
         : p.name === "Gold"
-        ? "🟨"
+        ? "🪙"
         : "⛏️"
   );
 }
