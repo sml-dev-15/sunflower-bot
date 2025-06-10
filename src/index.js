@@ -3,10 +3,8 @@ const {
   GatewayIntentBits,
   EmbedBuilder,
   SlashCommandBuilder,
-  Collection,
   REST,
   Routes,
-  InteractionType,
 } = require("discord.js");
 
 const fetch = require("node-fetch");
@@ -21,7 +19,11 @@ const { TOKEN, CLIENT_ID, COOLDOWN_SECONDS } = require("./config");
 const cooldowns = new Map();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 const commands = [
@@ -50,32 +52,10 @@ client.once("ready", () => {
   console.log(`🤖 Logged in as ${client.user?.tag}`);
 });
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "farm") return;
-
-  const userId = interaction.user.id;
-  const now = Date.now();
-
-  if (cooldowns.has(userId)) {
-    const expiration = cooldowns.get(userId);
-    if (now < expiration) {
-      const timeLeft = Math.ceil((expiration - now) / 1000);
-      return interaction.reply({
-        content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
-        ephemeral: true,
-      });
-    }
-  }
-
-  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
-
-  const id = interaction.options.getString("id");
+// Shared fetch + embed logic
+async function handleFarmCommand({ id, replyFn }) {
   if (!id) {
-    return interaction.reply({
-      content: "❌ Farm ID missing.",
-      ephemeral: true,
-    });
+    return replyFn("❌ Farm ID missing.");
   }
 
   try {
@@ -84,10 +64,7 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     if (!res.ok) {
-      return interaction.reply({
-        content: `❌ Failed to fetch farm data (status: ${res.status})`,
-        ephemeral: true,
-      });
+      return replyFn(`❌ Failed to fetch farm data (status: ${res.status})`);
     }
 
     const json = await res.json();
@@ -97,11 +74,9 @@ client.on("interactionCreate", async (interaction) => {
       parsed = farmSchema.parse(json);
     } catch (parseErr) {
       console.error("Schema parse error:", parseErr);
-      return interaction.reply({
-        content:
-          "⚠️ Failed to parse farm data (schema mismatch). Please check the farm ID.",
-        ephemeral: true,
-      });
+      return replyFn(
+        "⚠️ Failed to parse farm data (schema mismatch). Please check the farm ID."
+      );
     }
 
     const crops = getCropTimers(parsed.farm).join("\n") || "None";
@@ -118,14 +93,62 @@ client.on("interactionCreate", async (interaction) => {
       )
       .setColor(0x00cc66);
 
-    await interaction.reply({ embeds: [embed] });
+    return replyFn({ embeds: [embed] });
   } catch (err) {
     console.error("Unexpected error:", err);
-    interaction.reply({
-      content: "⚠️ Failed to fetch or parse data.",
+    return replyFn("⚠️ Failed to fetch or parse data.");
+  }
+}
+
+// Slash command
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName !== "farm") return;
+
+  const userId = interaction.user.id;
+  const now = Date.now();
+
+  if (cooldowns.has(userId) && now < cooldowns.get(userId)) {
+    const timeLeft = Math.ceil((cooldowns.get(userId) - now) / 1000);
+    return interaction.reply({
+      content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
       ephemeral: true,
     });
   }
+
+  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
+
+  const id = interaction.options.getString("id");
+  await handleFarmCommand({
+    id,
+    replyFn: (content) =>
+      typeof content === "string"
+        ? interaction.reply({ content, ephemeral: true })
+        : interaction.reply(content),
+  });
+});
+
+// Message command
+client.on("messageCreate", async (message) => {
+  if (message.author.bot || !message.content.startsWith("!farm")) return;
+
+  const userId = message.author.id;
+  const now = Date.now();
+
+  if (cooldowns.has(userId) && now < cooldowns.get(userId)) {
+    const timeLeft = Math.ceil((cooldowns.get(userId) - now) / 1000);
+    return message.reply(
+      `⏳ Please wait ${timeLeft} more second(s) before using this command again.`
+    );
+  }
+
+  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
+
+  const [, id] = message.content.split(" ");
+  await handleFarmCommand({
+    id,
+    replyFn: (content) => message.reply(content),
+  });
 });
 
 client.login(TOKEN);
