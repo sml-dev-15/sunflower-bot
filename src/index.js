@@ -1,7 +1,12 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const fetch = require("node-fetch");
 const { farmSchema } = require("./schema");
-const { getCropTimers, getStoneTimers } = require("./timers");
+const {
+  getCropTimers,
+  getStoneTimers,
+  getFruitTimersGrouped,
+  getFlowerTimersGrouped,
+} = require("./timers");
 const { TOKEN, COOLDOWN_SECONDS } = require("./config");
 
 const cooldowns = new Map();
@@ -64,12 +69,18 @@ client.on("messageCreate", async (message) => {
 
     const crops = getCropTimers(parsed.farm).join("\n") || "None";
     const resources = getStoneTimers(parsed.farm).join("\n") || "None";
+    const fruits =
+      getFruitTimersGrouped(parsed.farm.fruitPatches).join("\n") || "None";
+    const flowers =
+      getFlowerTimersGrouped(parsed.farm.flowers).join("\n") || "None";
 
     const embed = new EmbedBuilder()
       .setTitle(`🌾 Farm Status: ${id}`)
       .addFields(
         { name: "Crops", value: crops, inline: false },
-        { name: "Resources", value: resources, inline: false }
+        { name: "Resources", value: resources, inline: false },
+        { name: "Fruits", value: fruits, inline: false },
+        { name: "Flowers", value: flowers, inline: false }
       )
       .setColor(0x00cc66);
 
