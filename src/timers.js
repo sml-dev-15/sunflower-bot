@@ -3,8 +3,12 @@ const {
   RESOURCE_RECOVERY_TIMES,
   RESOURCE_KEY_MAP,
   FRUITS_TIMES,
-  FLOWERS_TIMES,
+  emojis,
 } = require("./constants");
+
+function getEmoji(name) {
+  return emojis[name] || "🌱";
+}
 
 function formatDuration(seconds) {
   if (seconds <= 0) return "✅ Ready!";
@@ -62,7 +66,7 @@ function getCropTimers(farm) {
     cropPlots,
     (c) => c.secondsLeft,
     (c) => c.name,
-    () => "🌱"
+    ({ name }) => getEmoji(name)
   );
 }
 
@@ -89,19 +93,13 @@ function getStoneTimers(farm) {
     plots,
     (p) => p.secondsLeft,
     (p) => p.name,
-    (p) =>
-      p.name === "Stone"
-        ? "🪨"
-        : p.name === "Iron"
-        ? "🛠️"
-        : p.name === "Gold"
-        ? "🪙"
-        : "⛏️"
+    ({ name }) => getEmoji(name)
   );
 }
 
 function getFruitTimersGrouped(fruitPatches = {}) {
-  const now = Math.floor(Date.now() / 1000);
+  const now = Date.now();
+
   const fruitPlots = Object.values(fruitPatches)
     .map((patch) => {
       const fruit = patch.fruit;
@@ -111,8 +109,8 @@ function getFruitTimersGrouped(fruitPatches = {}) {
       if (!fruitTime) return null;
 
       const plantedAt = Number(fruit.plantedAt);
-      const readyAt = plantedAt + fruitTime.plantSeconds;
-      const secondsLeft = readyAt - now;
+      const readyAt = plantedAt + fruitTime.plantSeconds * 1000;
+      const secondsLeft = Math.max(0, Math.floor((readyAt - now) / 1000));
 
       return { name: fruit.name, secondsLeft };
     })
@@ -122,45 +120,15 @@ function getFruitTimersGrouped(fruitPatches = {}) {
     fruitPlots,
     (f) => f.secondsLeft,
     (f) => f.name,
-    () => "🍉"
-  );
-}
-
-function getFlowerTimersGrouped(flowers = {}) {
-  const now = Math.floor(Date.now() / 1000);
-  const flowerBeds = Object.values(flowers.flowerBeds || {});
-
-  const flowerPlots = flowerBeds
-    .map((bed, i) => {
-      const flower = bed?.flower;
-      if (!flower || typeof flower !== "object") return null;
-
-      const flowerName = flower.name;
-      if (!flowerName || !FLOWERS_TIMES[flowerName]) return null;
-
-      const plantedAt = Number(flower.plantedAt);
-      if (isNaN(plantedAt)) return null;
-
-      const readyAt = plantedAt + FLOWERS_TIMES[flowerName].plantSeconds;
-      const secondsLeft = readyAt - now;
-
-      return { name: flowerName, secondsLeft };
-    })
-    .filter(Boolean);
-
-  return groupByTime(
-    flowerPlots,
-    (f) => f.secondsLeft,
-    (f) => f.name,
-    () => "🌸"
+    ({ name }) => getEmoji(name)
   );
 }
 
 module.exports = {
   formatDuration,
   groupByTime,
+  getEmoji,
   getCropTimers,
   getStoneTimers,
   getFruitTimersGrouped,
-  getFlowerTimersGrouped,
 };
