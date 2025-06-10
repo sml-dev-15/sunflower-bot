@@ -34,6 +34,16 @@ const stoneSchema = z
   })
   .passthrough();
 
+const fruitSchema = z
+  .object({
+    name: z.string(),
+    plantedAt: numberLike,
+    amount: numberLike,
+    harvestedAt: numberLike,
+    harvestsLeft: numberLike,
+  })
+  .passthrough();
+
 const plotSchema = z
   .object({
     createdAt: numberLike.default(0),
@@ -46,7 +56,45 @@ const plotSchema = z
   })
   .passthrough();
 
+const fruitPatchSchema = z
+  .object({
+    createdAt: numberLike,
+    x: numberLike,
+    y: numberLike,
+    height: numberLike.default(2),
+    width: numberLike.default(2),
+    fruit: fruitSchema.optional(),
+  })
+  .passthrough();
+
 const resourceCollectionSchema = z.record(plotSchema);
+const fruitPatchesSchema = z.record(fruitPatchSchema);
+
+const flowerSchema = z
+  .object({
+    plantedAt: numberLike,
+    amount: numberLike,
+    name: z.string(),
+  })
+  .passthrough();
+
+const flowerBedSchema = z
+  .object({
+    height: numberLike.default(1),
+    width: numberLike.default(3),
+    x: numberLike,
+    y: numberLike,
+    createdAt: numberLike,
+    flower: flowerSchema.optional(),
+  })
+  .passthrough();
+
+const flowersSchema = z
+  .object({
+    discovered: z.record(z.unknown()).optional(),
+    flowerBeds: z.record(flowerBedSchema).optional(),
+  })
+  .passthrough();
 
 const farmSchema = z
   .object({
@@ -58,6 +106,8 @@ const farmSchema = z
         iron: resourceCollectionSchema.optional(),
         gold: resourceCollectionSchema.optional(),
         stones: resourceCollectionSchema.optional(),
+        fruitPatches: fruitPatchesSchema.optional(),
+        flowers: flowersSchema.optional(),
       })
       .passthrough(),
   })
