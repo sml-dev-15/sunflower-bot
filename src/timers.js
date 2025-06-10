@@ -19,30 +19,50 @@ function formatDuration(seconds) {
 }
 
 function groupByTime(items, getSeconds, getName, emoji) {
-  const groups = items.reduce((acc, item) => {
+  const readyCountMap = {}; // Group for secondsLeft <= 0
+  const grouped = {}; // Group for secondsLeft > 0
+
+  for (const item of items) {
     const name = getName(item);
     const secondsLeft = getSeconds(item);
 
-    if (!acc[name]) acc[name] = [];
-
-    const match = acc[name].find((g) => Math.abs(g.time - secondsLeft) <= 60);
-    if (match) {
-      match.count += 1;
+    if (secondsLeft <= 0) {
+      readyCountMap[name] = (readyCountMap[name] || 0) + 1;
     } else {
-      acc[name].push({ time: secondsLeft, count: 1 });
+      if (!grouped[name]) grouped[name] = [];
+
+      const match = grouped[name].find(
+        (g) => Math.abs(g.time - secondsLeft) <= 60
+      );
+      if (match) {
+        match.count += 1;
+      } else {
+        grouped[name].push({ time: secondsLeft, count: 1 });
+      }
     }
+  }
 
-    return acc;
-  }, {});
+  const output = [];
 
-  return Object.entries(groups).flatMap(([name, group]) =>
-    group.map(
-      (g) =>
-        `${emoji({ name })} ${name} — ${formatDuration(g.time)}${
-          g.count > 1 ? ` (${g.count})` : ""
-        }`
-    )
-  );
+  // Add ready entries (✅ Ready!)
+  for (const [name, count] of Object.entries(readyCountMap)) {
+    const line = `${emoji({ name })} ${name} — ✅ Ready!${
+      count > 1 ? ` (${count})` : ""
+    }`;
+    output.push(line);
+  }
+
+  // Add entries with time remaining
+  for (const [name, group] of Object.entries(grouped)) {
+    for (const g of group) {
+      const line = `${emoji({ name })} ${name} — ${formatDuration(g.time)}${
+        g.count > 1 ? ` (${g.count})` : ""
+      }`;
+      output.push(line);
+    }
+  }
+
+  return output;
 }
 
 function getCropTimers(farm) {
@@ -109,7 +129,11 @@ function getFruitTimersGrouped(fruitPatches = {}) {
       if (!fruitTime) return null;
 
       const plantedAt = Number(fruit.plantedAt);
-      const readyAt = plantedAt + fruitTime.plantSeconds * 1000;
+      const harvestedAt = Number(fruit.harvestedAt) || 0;
+
+      const lastPlanted = harvestedAt > plantedAt ? harvestedAt : plantedAt;
+
+      const readyAt = lastPlanted + fruitTime.plantSeconds * 1000;
       const secondsLeft = Math.max(0, Math.floor((readyAt - now) / 1000));
 
       return { name: fruit.name, secondsLeft };
