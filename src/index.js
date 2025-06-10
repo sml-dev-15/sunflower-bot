@@ -1,158 +1,10 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
-const { farmSchema } = require("./schema");
 const fetch = require("node-fetch");
-const dotenv = require("dotenv");
-
-dotenv.config();
-
-const TOKEN = process.env.DISCORD_BOT_TOKEN;
-
-if (!TOKEN) {
-  throw new Error("Missing DISCORD_BOT_TOKEN environment variable");
-}
-
-const CROPS_TIMES = {
-  Sunflower: { harvestSeconds: 1 * 60 },
-  Potato: { harvestSeconds: 5 * 60 },
-  Rhubarb: { harvestSeconds: 10 * 60 },
-  Pumpkin: { harvestSeconds: 30 * 60 },
-  Zucchini: { harvestSeconds: 30 * 60 },
-  Carrot: { harvestSeconds: 60 * 60 },
-  Yam: { harvestSeconds: 60 * 60 },
-  Cabbage: { harvestSeconds: 2 * 60 * 60 },
-  Broccoli: { harvestSeconds: 2 * 60 * 60 },
-  Soybean: { harvestSeconds: 3 * 60 * 60 },
-  Beetroot: { harvestSeconds: 4 * 60 * 60 },
-  Pepper: { harvestSeconds: 4 * 60 * 60 },
-  Cauliflower: { harvestSeconds: 8 * 60 * 60 },
-  Parsnip: { harvestSeconds: 12 * 60 * 60 },
-  Eggplant: { harvestSeconds: 16 * 60 * 60 },
-  Corn: { harvestSeconds: 20 * 60 * 60 },
-  Onion: { harvestSeconds: 20 * 60 * 60 },
-  Radish: { harvestSeconds: 24 * 60 * 60 },
-  Wheat: { harvestSeconds: 24 * 60 * 60 },
-  Turnip: { harvestSeconds: 24 * 60 * 60 },
-  Kale: { harvestSeconds: 36 * 60 * 60 },
-  Artichoke: { harvestSeconds: 36 * 60 * 60 },
-  Barley: { harvestSeconds: 48 * 60 * 60 },
-};
-
-const RESOURCE_RECOVERY_TIMES = {
-  Stone: 4 * 60 * 60,
-  Iron: 8 * 60 * 60,
-  Gold: 24 * 60 * 60,
-};
-
-const RESOURCE_KEY_MAP = {
-  stones: "Stone",
-  iron: "Iron",
-  gold: "Gold",
-};
-
-function formatDuration(seconds) {
-  if (seconds <= 0) return "✅ Ready!";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h ? `${h}h ` : ""}${m ? `${m}m ` : ""}${s}s`;
-}
-
-function groupByTime(items, getSeconds, getName, emoji) {
-  const groups = {};
-
-  for (const item of items) {
-    const name = getName(item);
-    const secondsLeft = getSeconds(item);
-
-    if (!groups[name]) groups[name] = [];
-
-    const match = groups[name].find(
-      (g) => Math.abs(g.time - secondsLeft) <= 60
-    );
-
-    if (match) {
-      match.count += 1;
-    } else {
-      groups[name].push({ time: secondsLeft, count: 1 });
-    }
-  }
-
-  const result = [];
-
-  for (const [name, group] of Object.entries(groups)) {
-    for (const g of group) {
-      const emojiIcon = emoji({ name });
-      const timeStr = formatDuration(g.time);
-      result.push(
-        `${emojiIcon} ${name} — ${timeStr}${g.count > 1 ? ` (${g.count})` : ""}`
-      );
-    }
-  }
-
-  return result;
-}
-
-function getCropTimers(farm) {
-  const now = Date.now();
-  const cropPlots = Object.values(farm.crops)
-    .map((plot) => {
-      const crop = plot.crop;
-      if (!crop) return null;
-      const plantedAt = Number(crop.plantedAt);
-      const growTime = CROPS_TIMES[crop.name]?.harvestSeconds ?? 0;
-      const readyAt = plantedAt + growTime * 1000;
-      const secondsLeft = Math.floor((readyAt - now) / 1000);
-      return {
-        name: crop.name,
-        secondsLeft,
-      };
-    })
-    .filter(Boolean);
-
-  return groupByTime(
-    cropPlots,
-    (c) => c.secondsLeft,
-    (c) => c.name,
-    () => "🌱"
-  );
-}
-
-function getStoneTimers(farm) {
-  const now = Date.now();
-  const plots = [];
-
-  ["stones", "iron", "gold"].forEach((type) => {
-    const entries = farm[type];
-    if (!entries) return;
-
-    const recoveryKey = RESOURCE_KEY_MAP[type];
-    const recoveryTime = RESOURCE_RECOVERY_TIMES[recoveryKey];
-
-    for (const plot of Object.values(entries)) {
-      const minedAt = Number(plot.stone?.minedAt ?? 0);
-      const readyAt = minedAt + recoveryTime * 1000;
-      const secondsLeft = Math.floor((readyAt - now) / 1000);
-      plots.push({ name: recoveryKey, secondsLeft });
-    }
-  });
-
-  return groupByTime(
-    plots,
-    (p) => p.secondsLeft,
-    (p) => p.name,
-    (p) =>
-      p.name === "Stone"
-        ? "🪨"
-        : p.name === "Iron"
-        ? "🛠️"
-        : p.name === "Gold"
-        ? "🪙"
-        : "⛏️"
-  );
-}
+const { farmSchema } = require("./schema");
+const { getCropTimers, getStoneTimers } = require("./timers");
+const { TOKEN, COOLDOWN_SECONDS } = require("./config");
 
 const cooldowns = new Map();
-const COOLDOWN_SECONDS = 30;
 
 const client = new Client({
   intents: [
@@ -199,7 +51,6 @@ client.on("messageCreate", async (message) => {
     }
 
     const json = await res.json();
-    console.log("API response:", json);
 
     let parsed;
     try {
