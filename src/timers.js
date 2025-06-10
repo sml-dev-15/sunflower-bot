@@ -131,18 +131,20 @@ function getFlowerTimersGrouped(flowers = {}) {
   const flowerBeds = Object.values(flowers.flowerBeds || {});
 
   const flowerPlots = flowerBeds
-    .map((bed) => {
-      const flower = bed.flower;
-      if (!flower) return null;
+    .map((bed, i) => {
+      const flower = bed?.flower;
+      if (!flower || typeof flower !== "object") return null;
 
-      const flowerTime = FLOWERS_TIMES[flower.name];
-      if (!flowerTime) return null;
+      const flowerName = flower.name;
+      if (!flowerName || !FLOWERS_TIMES[flowerName]) return null;
 
       const plantedAt = Number(flower.plantedAt);
-      const readyAt = plantedAt + flowerTime.plantSeconds;
+      if (isNaN(plantedAt)) return null;
+
+      const readyAt = plantedAt + FLOWERS_TIMES[flowerName].plantSeconds;
       const secondsLeft = readyAt - now;
 
-      return { name: flower.name, secondsLeft };
+      return { name: flowerName, secondsLeft };
     })
     .filter(Boolean);
 
