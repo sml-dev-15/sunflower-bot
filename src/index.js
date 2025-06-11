@@ -6,7 +6,6 @@ const {
   REST,
   Routes,
 } = require("discord.js");
-
 const fetch = require("node-fetch");
 const { farmSchema } = require("./schema");
 const {
@@ -14,7 +13,7 @@ const {
   getStoneTimers,
   getFruitTimersGrouped,
 } = require("./timers");
-const { TOKEN, CLIENT_ID, COOLDOWN_SECONDS } = require("./config");
+const { TOKEN, CLIENT_ID, COOLDOWN_SECONDS = 15 } = require("./config");
 
 const cooldowns = new Map();
 
@@ -38,11 +37,14 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
+// Register slash command globally
 (async () => {
   try {
-    console.log("⏳ Registering slash command...");
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log("✅ Slash command registered.");
+    console.log("⏳ Registering slash command globally...");
+    await rest.put(Routes.applicationCommands(CLIENT_ID), {
+      body: commands,
+    });
+    console.log("✅ Slash command registered globally.");
   } catch (error) {
     console.error("❌ Failed to register command:", error);
   }
@@ -52,40 +54,30 @@ client.once("ready", () => {
   console.log(`🤖 Logged in as ${client.user?.tag}`);
 });
 
-// Shared fetch + embed logic
-async function handleFarmCommand({ id, replyFn }) {
-  if (!id) {
-    return replyFn("❌ Farm ID missing.");
+async function fetchFarmData(id) {
+  const response = await fetch(
+    `https://api.sunflower-land.com/community/farms/${id}`
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
   }
+  const data = await response.json();
+  return farmSchema.parse(data);
+}
+
+async function handleFarmCommand({ id, replyFn }) {
+  if (!id) return replyFn("❌ Farm ID missing.");
 
   try {
-    const res = await fetch(
-      `https://api.sunflower-land.com/community/farms/${id}`
-    );
+    const farmData = await fetchFarmData(id);
 
-    if (!res.ok) {
-      return replyFn(`❌ Failed to fetch farm data (status: ${res.status})`);
-    }
-
-    const json = await res.json();
-
-    let parsed;
-    try {
-      parsed = farmSchema.parse(json);
-    } catch (parseErr) {
-      console.error("Schema parse error:", parseErr);
-      return replyFn(
-        "⚠️ Failed to parse farm data (schema mismatch). Please check the farm ID."
-      );
-    }
-
-    const crops = getCropTimers(parsed.farm).join("\n") || "None";
-    const resources = getStoneTimers(parsed.farm).join("\n") || "None";
+    const crops = getCropTimers(farmData.farm).join("\n") || "None";
+    const resources = getStoneTimers(farmData.farm).join("\n") || "None";
     const fruits =
-      getFruitTimersGrouped(parsed.farm.fruitPatches).join("\n") || "None";
+      getFruitTimersGrouped(farmData.farm.fruitPatches).join("\n") || "None";
 
     const embed = new EmbedBuilder()
-      .setTitle(`🌾 Farm Status: ${id}`)
+      .setTitle(`🌾 Farm Id: ${id}`)
       .addFields(
         { name: "Crops", value: crops, inline: false },
         { name: "Resources", value: resources, inline: false },
@@ -94,31 +86,45 @@ async function handleFarmCommand({ id, replyFn }) {
       .setColor(0x00cc66);
 
     return replyFn({ embeds: [embed] });
-  } catch (err) {
-    console.error("Unexpected error:", err);
-    return replyFn("⚠️ Failed to fetch or parse data.");
+  } catch (error) {
+    if (error.name === "ZodError") {
+      console.error("Schema validation error:", error);
+      return replyFn(
+        "⚠️ Failed to parse farm data. The data format may have changed."
+      );
+    }
+    console.error("Error fetching or parsing farm data:", error);
+    return replyFn(`❌ Error: ${error.message}`);
   }
 }
 
-// Slash command
+function isOnCooldown(userId) {
+  const now = Date.now();
+  const expiry = cooldowns.get(userId);
+  return expiry && now < expiry;
+}
+
+function setCooldown(userId) {
+  cooldowns.set(userId, Date.now() + COOLDOWN_SECONDS * 1000);
+}
+
+// Slash command handler
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "farm") return;
+  if (!interaction.isChatInputCommand() || interaction.commandName !== "farm")
+    return;
 
   const userId = interaction.user.id;
-  const now = Date.now();
-
-  if (cooldowns.has(userId) && now < cooldowns.get(userId)) {
-    const timeLeft = Math.ceil((cooldowns.get(userId) - now) / 1000);
+  if (isOnCooldown(userId)) {
+    const timeLeft = Math.ceil((cooldowns.get(userId) - Date.now()) / 1000);
     return interaction.reply({
       content: `⏳ Please wait ${timeLeft} more second(s) before using this command again.`,
       ephemeral: true,
     });
   }
 
-  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
-
+  setCooldown(userId);
   const id = interaction.options.getString("id");
+
   await handleFarmCommand({
     id,
     replyFn: (content) =>
@@ -128,23 +134,21 @@ client.on("interactionCreate", async (interaction) => {
   });
 });
 
-// Message command
+// Message command handler
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.content.startsWith("!farm")) return;
 
   const userId = message.author.id;
-  const now = Date.now();
-
-  if (cooldowns.has(userId) && now < cooldowns.get(userId)) {
-    const timeLeft = Math.ceil((cooldowns.get(userId) - now) / 1000);
+  if (isOnCooldown(userId)) {
+    const timeLeft = Math.ceil((cooldowns.get(userId) - Date.now()) / 1000);
     return message.reply(
       `⏳ Please wait ${timeLeft} more second(s) before using this command again.`
     );
   }
 
-  cooldowns.set(userId, now + COOLDOWN_SECONDS * 1000);
-
+  setCooldown(userId);
   const [, id] = message.content.split(" ");
+
   await handleFarmCommand({
     id,
     replyFn: (content) => message.reply(content),
