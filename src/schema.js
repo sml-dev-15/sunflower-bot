@@ -96,6 +96,41 @@ const flowersSchema = z
   })
   .passthrough();
 
+const deliveryRewardSchema = z
+  .object({
+    coins: numberLike.optional(),
+    sfl: numberLike.optional(),
+  })
+  .passthrough();
+
+const deliveryOrderSchema = z
+  .object({
+    createdAt: numberLike,
+    id: z.string(),
+    from: z.string(),
+    items: z.record(z.string(), numberLike),
+    readyAt: numberLike,
+    reward: deliveryRewardSchema,
+    completedAt: numberLike.optional(),
+  })
+  .passthrough();
+
+const deliverySchema = z
+  .object({
+    orders: z.array(deliveryOrderSchema),
+    fulfilledCount: numberLike,
+    milestone: z.object({
+      goal: numberLike,
+      total: numberLike,
+    }),
+    doubleDelivery: z.string(),
+    dailySFL: z.object({
+      day: numberLike,
+      amount: numberLike,
+    }),
+  })
+  .passthrough();
+
 const farmSchema = z
   .object({
     farm: z
@@ -108,6 +143,7 @@ const farmSchema = z
         stones: resourceCollectionSchema.optional().default({}),
         fruitPatches: fruitPatchesSchema.optional().default({}),
         flowers: flowersSchema.optional().default({}),
+        delivery: deliverySchema.optional(),
       })
       .passthrough(),
   })
