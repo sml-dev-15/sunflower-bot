@@ -13,6 +13,11 @@ const {
   getStoneTimers,
   getFruitTimersGrouped,
 } = require("./timers");
+const {
+  getOrdersByGoldCoinReward,
+  getOrdersByFlowerReward,
+} = require("./orders");
+
 const { TOKEN, CLIENT_ID, COOLDOWN_SECONDS = 15 } = require("./config");
 
 const cooldowns = new Map();
@@ -25,19 +30,32 @@ const client = new Client({
   ],
 });
 
+// Slash Command Registration
 const commands = [
   new SlashCommandBuilder()
     .setName("farm")
-    .setDescription("Check the status of a Sunflower Land farm")
-    .addStringOption((option) =>
-      option.setName("id").setDescription("Your farm ID").setRequired(true)
+    .setDescription("Farm-related commands")
+    .addSubcommand((sub) =>
+      sub
+        .setName("status")
+        .setDescription("Check the status of a Sunflower Land farm")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("Your farm ID").setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("task")
+        .setDescription("View task orders for a Sunflower Land farm")
+        .addStringOption((opt) =>
+          opt.setName("id").setDescription("Your farm ID").setRequired(true)
+        )
     )
     .toJSON(),
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// Register slash command globally
 (async () => {
   try {
     console.log("⏳ Registering slash command globally...");
@@ -54,15 +72,23 @@ client.once("ready", () => {
   console.log(`🤖 Logged in as ${client.user?.tag}`);
 });
 
+function isOnCooldown(userId) {
+  const now = Date.now();
+  const expiry = cooldowns.get(userId);
+  return expiry && now < expiry;
+}
+
+function setCooldown(userId) {
+  cooldowns.set(userId, Date.now() + COOLDOWN_SECONDS * 1000);
+}
+
 async function fetchFarmData(id) {
-  const response = await fetch(
+  const res = await fetch(
     `https://api.sunflower-land.com/community/farms/${id}`
   );
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  const data = await response.json();
-  return farmSchema.parse(data);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  return farmSchema.parse(json);
 }
 
 async function handleFarmCommand({ id, replyFn }) {
@@ -98,17 +124,39 @@ async function handleFarmCommand({ id, replyFn }) {
   }
 }
 
-function isOnCooldown(userId) {
-  const now = Date.now();
-  const expiry = cooldowns.get(userId);
-  return expiry && now < expiry;
+async function handleTaskCommand({ id, replyFn }) {
+  if (!id) return replyFn("❌ Farm ID missing.");
+
+  try {
+    const farmData = await fetchFarmData(id);
+    const goldCoinOrders = getOrdersByGoldCoinReward(farmData.farm);
+    const flowerOrders = getOrdersByFlowerReward(farmData.farm);
+
+    const goldText = goldCoinOrders.join("\n") || "None";
+    const flowerText = flowerOrders.join("\n") || "None";
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📦 Tasks for Farm ${id}`)
+      .addFields(
+        { name: "🪙 Coin Rewards", value: goldText, inline: false },
+        { name: "🌼 SFL Rewards", value: flowerText, inline: false }
+      )
+      .setColor(0xffc107);
+
+    return replyFn({ embeds: [embed] });
+  } catch (error) {
+    if (error.name === "ZodError") {
+      console.error("Schema validation error:", error);
+      return replyFn(
+        "⚠️ Failed to parse farm data. The data format may have changed."
+      );
+    }
+    console.error("Error fetching or parsing task data:", error);
+    return replyFn(`❌ Error: ${error.message}`);
+  }
 }
 
-function setCooldown(userId) {
-  cooldowns.set(userId, Date.now() + COOLDOWN_SECONDS * 1000);
-}
-
-// Slash command handler
+// Slash Command Handler
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand() || interaction.commandName !== "farm")
     return;
@@ -123,18 +171,30 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   setCooldown(userId);
-  const id = interaction.options.getString("id");
 
-  await handleFarmCommand({
-    id,
-    replyFn: (content) =>
-      typeof content === "string"
-        ? interaction.reply({ content, ephemeral: true })
-        : interaction.reply(content),
-  });
+  const id = interaction.options.getString("id");
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === "status") {
+    await handleFarmCommand({
+      id,
+      replyFn: (content) =>
+        typeof content === "string"
+          ? interaction.reply({ content, ephemeral: true })
+          : interaction.reply(content),
+    });
+  } else if (sub === "task") {
+    await handleTaskCommand({
+      id,
+      replyFn: (content) =>
+        typeof content === "string"
+          ? interaction.reply({ content, ephemeral: true })
+          : interaction.reply(content),
+    });
+  }
 });
 
-// Message command handler
+// Message Command Handler (!farm or !farm task)
 client.on("messageCreate", async (message) => {
   if (message.author.bot || !message.content.startsWith("!farm")) return;
 
@@ -146,13 +206,31 @@ client.on("messageCreate", async (message) => {
     );
   }
 
-  setCooldown(userId);
-  const [, id] = message.content.split(" ");
+  const args = message.content.trim().split(" ");
+  const [command, sub, maybeId] = args;
 
-  await handleFarmCommand({
-    id,
-    replyFn: (content) => message.reply(content),
-  });
+  // case: !farm task <id>
+  if (sub === "task" && maybeId) {
+    setCooldown(userId);
+    return await handleTaskCommand({
+      id: maybeId,
+      replyFn: (content) => message.reply(content),
+    });
+  }
+
+  // case: !farm <id>
+  if (sub && !isNaN(sub)) {
+    setCooldown(userId);
+    return await handleFarmCommand({
+      id: sub,
+      replyFn: (content) => message.reply(content),
+    });
+  }
+
+  // Invalid command format
+  return message.reply(
+    "❌ Please use `!farm <FARM_ID>` or `!farm task <FARM_ID>`."
+  );
 });
 
 client.login(TOKEN);
