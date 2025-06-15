@@ -36,7 +36,7 @@ function getOrdersByGoldCoinReward(farm) {
 
   if (lines.length === 0) return [];
 
-  return ["🪙 Coin Rewards", ...lines, `**Total Coins:** ${totalCoins}`];
+  return [...lines, `**Total Coins: 🪙** ${totalCoins}`];
 }
 
 function getOrdersByFlowerReward(farm) {
@@ -57,7 +57,7 @@ function getOrdersByFlowerReward(farm) {
 
   if (lines.length === 0) return [];
 
-  return ["🌼 SFL Rewards", ...lines, `**Total SFL:** ${totalSFL.toFixed(2)}`];
+  return [...lines, `**Total SFL: 🌼** ${totalSFL.toFixed(2)}`];
 }
 
 module.exports = {
